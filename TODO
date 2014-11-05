@@ -1,0 +1,14 @@
+dhcpcd-efl
+----------
+Port it!
+
+TODO's for all
+-----------------------------------
+  *  Merge multiple BSSID's with the same SSID into one menu item rather
+     than many, picking the strongest one.
+  *  SSID preference
+  *  OpenVPN config screen per user and system wide, triggerd via dhcpcd hook.
+
+NON STARTING IDEAS
+------------------
+  *  Complex IP setups, this is only a tool for $MOM.

@@ -1,0 +1,453 @@
+#!/bin/sh
+# Try and be like autotools configure, but without autotools
+
+echo "configure args: $*"
+exec 3>config.log
+
+# Ensure that we do not inherit these from env
+DEBUG=
+LIBDHCPCD=no
+HOST=
+HOSTCC=
+BUILD=
+WITH_DHCPCD_ONLINE=yes
+WITH_GTK=
+WITH_QT=
+WITH_ICONS=
+NOTIFY=
+INCLUDEDIR=
+UI=
+
+for x; do
+	opt=${x%%=*}
+	var=${x#*=}
+	[ "$var" = "$opt" ] && var=
+	case "$opt" in
+	--os|OS) OS=$var;;
+	--with-cc|CC) CC=$var;;
+	--debug) DEBUG=$var;;
+	--disable-debug) DEBUG=no;;
+	--enable-debug) DEBUG=yes;;
+	--prefix) prefix=$var;;
+	--sysconfdir) SYSCONFDIR=$var;;
+	--bindir) BINDIR=$var;;
+	--libexecdir) LIBEXECDIR=$var;;
+	--statedir|--localstatedir) STATEDIR=$var;;
+	--rundir) RUNDIR=$var;;
+	--mandir) MANDIR=$var;;
+	--with-ccopts|CFLAGS) CFLAGS=$var;;
+	CPPFLAGS) CPPFLAGS=$var;;
+	--build) BUILD=$var;;
+	--host) HOST=$var; HOSTCC=$var-;;
+	--target) TARGET=$var;;
+	--libdir) LIBDIR=$var;;
+	--includedir) eval INCLUDEDIR="$INCLUDEDIR${INCLUDEDIR:+ }$var";;
+	--datadir|--infodir) ;; # ignore autotools
+	--disable-maintainer-mode|--disable-dependency-tracking) ;;
+	--with-dhcpcd-online) WITH_DHCPCD_ONLINE=${var:-yes};;
+	--without-dhcpcd-online) WITH_DHCPCD_ONLINE=no;;
+	--with-gtk|--with-gtk+) WITH_GTK=${var:-yes};;
+	--without-gtk|--without-gtk+) WITH_GTK=no;;
+	--with-qt) WITH_QT=${var:-yes};;
+	--without-qt) WITH_QT=no;;
+	QTDIR) QTDIR=$var;;
+	--with-icons) WITH_ICONS=${var:-yes};;
+	--without-icons) WITH_ICONS=no;;
+	--enable-notification) NOTIFY=yes;;
+	--disable-notification) NOTIFY=no;;
+	--help) echo "See the README file for available options"; exit 0;;
+	*) echo "$0: WARNING: unknown option $opt" >&2;;
+	esac
+done
+
+: ${INSTALL:=install}
+: ${SED:=sed}
+
+: ${PREFIX:=${prefix:=/usr/local}}
+: ${SYSCONFDIR:=$PREFIX/etc}
+: ${BINDIR:=$PREFIX/bin}
+: ${LIBEXECDIR:=$PREFIX/libexec}
+: ${STATEDIR:=/var}
+: ${MANDIR:=${PREFIX:-/usr}/share/man}
+
+: ${ICONDIR:=$PREFIX/share/dhcpcd/icons}
+
+eval SYSCONFDIR="$SYSCONFDIR"
+eval LIBDIR="$LIBDIR"
+eval LIBEXECDIR="$LIBEXECDIR"
+eval STATEDIR="$STATEDIR"
+eval DBDIR="$DBDIR"
+eval RUNDIR="$RUNDIR"
+eval MANDIR="$MANDIR"
+
+_which()
+{
+	x="$(which "$1" 2>/dev/null)"
+	if [ -n "$x" ]; then
+		echo "$x"
+		return 0
+	fi
+	for x in /sbin/"$1" /usr/sbin/"$1" \
+		/usr/pkg/sbin/"$1" /usr/local/sbin/"$1"
+	do
+		if [ -e "$x" ]; then
+			echo "$x"
+			return 0
+		fi
+	done
+	return 1
+}
+
+CONFIG_H=config.h
+CONFIG_MK=config.mk
+
+if [ -z "$BUILD" ]; then
+	# autoconf target triplet: cpu-vendor-os
+	BUILD=$(uname -m)-unknown-$(uname -s | tr '[:upper:]' '[:lower:]')
+fi
+: ${HOST:=$BUILD}
+
+if [ -z "$OS" ]; then
+	echo "Deriving operating system from ... $HOST"
+	# Derive OS from cpu-vendor-[kernel-]os
+	CPU=${HOST%%-*}
+	REST=${HOST#*-}
+	if [ "$CPU" != "$REST" ]; then
+		VENDOR=${REST%%-*}
+		REST=${REST#*-}
+		if [ "$VENDOR" != "$REST" ]; then
+			# Use kernel if given, otherwise os
+			OS=${REST%%-*}
+		else
+			# 2 tupple
+			OS=$VENDOR
+			VENDOR=
+		fi
+	fi
+
+        # Work with cpu-kernel-os, ie Debian
+	case "$VENDOR" in
+	linux*|kfreebsd*) OS=$VENDOR; VENDOR= ;;
+	esac
+	# Special case
+	case "$OS" in
+	gnu*) OS=hurd;; # No HURD support as yet
+	esac
+fi
+
+echo "Configuring dhcpcd for ... $OS"
+rm -f $CONFIG_H $CONFIG_MK
+echo "# $OS" >$CONFIG_MK
+echo "/* $OS */" >$CONFIG_H
+
+VERSION=$($SED -ne 's/VERSION=	//p' Makefile)
+echo "#define VERSION		\"$VERSION\"" >>$CONFIG_H
+
+for x in PREFIX SYSCONFDIR BINDIR; do
+	eval v=\$$x
+	# Make files look nice for import
+	l=$((10 - ${#x}))
+	unset t
+	[ $l -gt 3 ] && t="	"
+	echo "$x=$t	$v" >>$CONFIG_MK
+	unset t
+	[ $l -gt 2 ] && t="	"
+	echo "#define $x$t	\"$v\"" >>$CONFIG_H
+done
+echo "#define ICONDIR		\"$ICONDIR\"" >>$CONFIG_H
+echo "MANDIR=		$MANDIR" >>$CONFIG_MK
+
+# Always obey CC.
+if [ -n "$CC" ]; then
+	HOSTCC=
+else
+	CC=cc
+	_COMPILERS="cc clang gcc pcc icc"
+fi
+# Only look for a cross compiler if --host and --build are not the same
+if [ -n "$HOSTCC" -a "$BUILD" != "$HOST" ]; then
+	for _CC in $_COMPILERS; do
+		_CC=$(_which "$HOSTCC$_CC")
+		if [ -x "$_CC" ]; then
+			CC=$_CC
+			break
+		fi
+	done
+fi
+if ! type "$CC" >/dev/null 2>&1; then
+	for _CC in $_COMPILERS; do
+		_CC=$(_which "$_CC")
+		if [ -x "$_CC" ]; then
+			CC=$_CC
+			break
+		fi
+	done
+fi
+
+echo "Using compiler .. $CC"
+cat <<EOF >_test.c
+int main(void) {
+	return 0;
+}
+EOF
+_CC=false
+if $CC _test.c -o _test >/dev/null 2>&3; then
+	[ -x _test ] && _CC=true
+fi
+rm -f _test.c _test
+if ! $_CC; then
+	echo "$CC does not create executables"
+	exit 1
+fi
+[ "$CC" != cc ] && echo "CC=	$CC" >>$CONFIG_MK
+$CC --version | $SED -e '1!d'
+
+# Set to blank, then append user config
+# We do this so our SED call to append to XCC remains portable
+if [ -n "$CFLAGS" ]; then
+	echo "CFLAGS=" >>$CONFIG_MK
+	echo "CFLAGS+=	$CFLAGS" >>$CONFIG_MK
+fi
+if [ -n "$CPPFLAGS" ]; then
+	echo "CPPFLAGS=" >>$CONFIG_MK
+	echo "CPPFLAGS+=	$CPPFLAGS" >>$CONFIG_MK
+fi
+if [ -n "$LDFLAGS" ]; then
+	echo "LDFLAGS=" >>$CONFIG_MK
+	echo "LDFLAGS+=	$LDFLAGS" >>$CONFIG_MK
+fi
+
+for x in $INCLUDEDIR; do
+	echo "CPPFLAGS+=	-I$x" >>$CONFIG_MK
+done
+
+if [ -z "$DEBUG" -a -f .fslckout ]; then
+	printf "Found fossil checkout ... "
+	DEBUG=yes
+else
+	DEBUG=no
+fi
+if [ "$DEBUG" != no -a "$DEBUG" != false ]; then
+	echo "Adding debugging CFLAGS"
+	cat <<EOF >>$CONFIG_MK
+CFLAGS+=	-g -Wall -Wextra -Wshadow -Wformat=2
+CFLAGS+=	-Wmissing-prototypes -Wmissing-declarations
+CFLAGS+=	-Wmissing-noreturn -Wmissing-format-attribute
+CFLAGS+=	-Wnested-externs
+CFLAGS+=	-Winline -Wwrite-strings -Wcast-align -Wcast-qual
+CFLAGS+=	-Wpointer-arith -Wstrict-overflow
+CFLAGS+=	-Wdeclaration-after-statement
+CFLAGS+=	-Wconversion
+EOF
+	case "$OS" in
+	mirbsd*|openbsd*);; # OpenBSD has many redundant decs in system headers
+	*)		echo "CFLAGS+=	-Wredundant-decls" >>$CONFIG_MK;;
+	esac
+else
+	# Disable assertations
+	echo "CFLAGS+=	-DNDEBUG" >>$CONFIG_MK
+fi
+
+# Add CPPFLAGS and CFLAGS to CC for testing features
+XCC="$CC `$SED -n -e 's/CPPLAGS+=*\(.*\)/\1/p' $CONFIG_MK`"
+XCC="$XCC `$SED -n -e 's/CFLAGS+=*\(.*\)/\1/p' $CONFIG_MK`"
+
+if [ -z "$GETTEXT" ]; then
+	printf "Testing for gettext ... "
+	cat <<EOF >_gettext.c
+#include <libintl.h>
+int main(void) {
+	gettext("foo");
+	return 0;
+}
+EOF
+	LIB_INTL=
+	if $XCC _gettext.c -o _gettext 2>&3; then
+		GETTEXT=yes
+	elif $XCC _gettext.c -o _gettext -lintl 2>&3; then
+		GETTEXT="yes (-lintl)"
+		LIB_INTL=-lintl
+		QMAKE_CONFIG="CONFIG+=has_libintl"
+	else
+		GETTEXT=no
+	fi
+	echo "$GETTEXT"
+	rm -f _gettext.c _gettext
+fi
+if [ "$GETTEXT" != no ]; then
+	echo "#define HAS_GETTEXT" >>$CONFIG_H
+	echo "LIB_INTL=	$LIB_INTL" >>$CONFIG_MK
+fi
+
+if [ -z "$STRLCPY" ]; then
+	printf "Testing for strlcpy ... "
+	cat <<EOF >_strlcpy.c
+#include <string.h>
+int main(void) {
+	const char s1[] = "foo";
+	char s2[10];
+	strlcpy(s2, s1, sizeof(s2));
+	return 0;
+}
+EOF
+	if $XCC _strlcpy.c -o _strlcpy 2>&3; then
+		STRLCPY=yes
+	else
+		STRLCPY=no
+	fi
+	echo "$STRLCPY"
+	rm -f _strlcpy.c _strlcpy
+fi
+if [ "$STRLCPY" = no ]; then
+	echo "#define strlcpy(dst, src, n) " \
+	    "((size_t)snprintf(dst, n, \"%s\", src))" \
+	    >>$CONFIG_H
+fi
+
+if [ -z "$STRVERSCMP" ]; then
+	printf "Testing for strverscmp ... "
+	cat <<EOF >_strverscmp.c
+#define _GNU_SOURCE
+#include <string.h>
+int main(void) {
+	strverscmp(NULL, NULL);
+	return 0;
+}
+EOF
+	if $XCC _strverscmp.c -o _strverscmp 2>&3; then
+		STRVERSCMP=yes
+	else
+		STRVERSCMP=no
+	fi
+	echo "$STRVERSCMP"
+	rm -f _strverscmp.c _strverscmp
+fi
+if [ "$STRVERSCMP" = yes ]; then
+	echo "#define HAVE_STRVERSCMP" >>$CONFIG_H
+fi
+
+if [ -z "$LIBDIR" ]; then
+	printf "lib directory name ... "
+	case `readlink /lib` in
+		"") LIBNAME="lib";;
+		*) LIBNAME=$(basename `readlink /lib`);;
+	esac
+	echo "$LIBNAME"
+	echo "LIBNAME=	$LIBNAME" >>$CONFIG_MK
+	LIBDIR=${PREFIX}/${LIBNAME}
+	echo "LIBDIR=		\${PREFIX}/\${LIBNAME}" >>$CONFIG_MK
+else
+	echo "LIBDIR=	$LIBDIR" >>$CONFIG_MK
+fi
+
+# We normally want to build in the static library
+if [ "$LIBDHCPCD" = yes ]; then
+	x="-ldhcpcd"
+	echo "LIB_DHCPCD_INSTALL=	_libinstall" >>$CONFIG_MK
+else
+	x="-Wl,-Bstatic -ldhcpcd -Wl,-Bdynamic"
+fi
+echo "LIB_DHCPCD=	$x" >>$CONFIG_MK
+
+# Due to our use of pkg-config, pass --as-needed to ld so we only link
+# what we actually need.
+echo "LDADD+=		-Wl,--as-needed" >>$CONFIG_MK
+
+_NOTIFY="$NOTIFY"
+_WITH_GTK="$WITH_GTK"
+if [ "$WITH_GTK" = yes -o -z "$WITH_GTK" ]; then
+	if pkg-config --cflags gtk+-2.0 >/dev/null 2>&3; then
+		WITH_GTK="gtk+-2.0"
+	elif pkg-config --cflags gtk+-3.0 >/dev/null 2>&3; then
+		WITH_GTK="gtk+-3.0"
+	fi
+elif [ -n "$WITH_GTK" -a "$WITH_GTK" != no ]; then
+	if ! pkg-config --cflags $WITH_GTK >/dev/null 2>&3; then
+		echo "$0: no suitable GTK+ library has been found" >&2
+		exit 1
+	fi
+fi
+	
+if [ -n "$WITH_GTK" -a "$WITH_GTK" != no ]; then
+	PKG="$WITH_GTK"
+	if [ "$NOTIFY" = yes -o -z "$NOTIFY" ]; then
+		if ! pkg-config --cflags libnotify >/dev/null 2>&3; then
+			echo "libnotify not found" >&2
+			[ "$NOTIFY" = yes -n "$_WITH_GTK" ] && exit 1
+		fi
+		NOTIFY=yes
+	fi
+	if [ "$NOTIFY" = yes ]; then
+		PKG="$PKG${PKG:+ }libnotify"
+		echo "NOTIFY=		-DNOTIFY" >>$CONFIG_MK
+		echo "Building dhcpcd-gtk with notification support"
+	fi
+	GTK_CFLAGS=$(pkg-config --cflags $PKG)
+	[ $? != 0 -a "$WITH_GTK" = yes ] && exit 1
+	GTK_LIBS=$(pkg-config --libs $PKG)
+	[ $? != 0 -a "$WITH_GTK" = yes ] && exit 1
+	echo "GTK_CFLAGS=	$GTK_CFLAGS" >>$CONFIG_MK
+	echo "GTK_LIBS=	$GTK_LIBS" >>$CONFIG_MK
+	UI="$UI${UI:+ }dhcpcd-gtk"
+fi
+
+DHCPCD_QT=false
+if [ -z "$WITH_QT" -o "$WITH_QT" != no ]; then
+	if [ -z "$QMAKE" ]; then
+		if [ -x "$QTDIR"/bin/qmake ]; then
+			QMAKE="$QTDIR"/bin/qmake
+		else
+			QMAKE=$(_which qmake)
+		fi
+	fi
+	if [ -x "$QMAKE" ]; then
+		UI="$UI${UI+ }dhcpcd-qt"
+		DHCPCD_QT=true
+	else
+		echo "$0: no suitable Qt library has been found" >&2
+		[ -z "$WITH_QT" ] || exit 1
+	fi
+fi
+
+NOTIFY="$_NOTIFY"
+if $DHCPCD_QT && [ -z "$NOTFY" -o "$NOTIFY" = yes ]; then
+	if type knotify4 >/dev/null 2>&3; then
+		QMAKE_CONFIG="$QMAKE_CONFIG CONFIG+=has_libkdeui"
+		echo "Building dhcpcd-qt with notification support"
+	elif [ "$NOTIFY" = yes ]; then
+		echo "$0: knotify4 not found" >&2
+		exit 1
+	fi
+fi
+
+if [ -n "$UI" -a -z "$WITH_ICONS" ]; then
+	WITH_ICONS=yes
+fi
+if [ "$WITH_ICONS" = yes ]; then
+	echo "MKICONS=	icons" >>$CONFIG_MK
+fi
+
+if [ -n "$WITH_DHCPCD_ONLINE" -a "$WITH_DHCPCD_ONLINE" != no ]; then
+	UI="dhcpcd-online${UI:+ }$UI"
+fi
+echo "UI=		${UI:+libdhcpcd }$UI" >>$CONFIG_MK
+
+echo
+echo "   SYSCONFDIR =		$SYSCONFDIR"
+echo "   BINDIR =		$BINDIR"
+echo "   LIBDIR = 		$LIBDIR"
+echo "   ICONDIR = 		$ICONDIR"
+echo "   MANDIR =		$MANDIR"
+echo "   UI =			$UI"
+echo
+
+echo "MKDIR=		\${TOPDIR}/mk" >>$CONFIG_MK
+
+if $DHCPCD_QT; then
+	QMAKE_CONFIG="$QMAKE_CONFIG PREFIX=$PREFIX SYSCONFDIR=$SYSCONFDIR"
+	QMAKE_CONFIG="$QMAKE_CONFIG MANDIR=$MANDIR"
+	if ! (cd src/dhcpcd-qt; $QMAKE $QMAKE_CONFIG dhcpcd-qt.pro); then
+		echo "$0: failed to configure dhcpcd-qt" >&2
+		exit 1
+	fi
+fi
