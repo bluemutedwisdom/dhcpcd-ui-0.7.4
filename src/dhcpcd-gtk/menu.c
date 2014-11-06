@@ -171,6 +171,7 @@ create_menu(GtkWidget *m, WI_SCAN *wis, DHCPCD_WI_SCAN *scan)
 	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
 	gtk_container_add(GTK_CONTAINER(wim->menu), box);
 	wim->ssid = gtk_label_new(scan->ssid);
+
 	gtk_box_pack_start(GTK_BOX(box), wim->ssid, TRUE, TRUE, 0);
 
 	if (wis->interface->up &&
@@ -224,46 +225,21 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 	}
 
 	TAILQ_FOREACH_SAFE(wim, &wi->menus, next, win) {
-		found = false;
-		for (s = scans; s; s = s->next) {
-			if (memcmp(wim->scan->bssid, s->bssid,
-			    sizeof(s->bssid)) == 0)
-			{
-				found = true;
-				update_item(wi, wim, s);
-			}
-		}
-		if (!found) {
 			TAILQ_REMOVE(&wi->menus, wim, next);
 			gtk_widget_destroy(wim->menu);
-			//g_free(wim->scan); !!!!SPL
 			g_free(wim);
-			adjust--;
-		}
 	}
 
 	for (s = scans; s; s = s->next) {
-		found = false;
-		TAILQ_FOREACH(wim, &wi->menus, next) {
-			if (memcmp(wim->scan->bssid, s->bssid,
-			    sizeof(s->bssid)) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			wim = create_menu(wi->ifmenu, wi, s);
-			TAILQ_INSERT_TAIL(&wi->menus, wim, next);
-			gtk_widget_show_all(wim->menu);
-			adjust++;
-		}
+		wim = create_menu(wi->ifmenu, wi, s);
+		TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+		gtk_widget_show_all(wim->menu);
 	}
 
 	dhcpcd_wi_scans_free(wi->scans);
 	wi->scans = scans;
 
-	if (adjust && gtk_widget_get_visible(wi->ifmenu))
+	if (gtk_widget_get_visible(wi->ifmenu))
 		gtk_menu_reposition(GTK_MENU(wi->ifmenu));
 }
 
