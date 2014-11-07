@@ -763,6 +763,12 @@ dhcpcd_wpa_status_cb(DHCPCD_WPA *wpa, const char *status, _unused void *data)
 	}
 }
 
+static gboolean rescan(gpointer data)
+{
+	system ("wpa_cli scan");
+	return TRUE;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -803,6 +809,8 @@ main(int argc, char *argv[])
 		g_timeout_add(DHCPCD_RETRYOPEN, dhcpcd_try_open, con);
 
 	menu_init(status_icon, con);
+
+	g_timeout_add (60000, rescan, NULL);
 
 	gtk_main();
 	dhcpcd_close(con);

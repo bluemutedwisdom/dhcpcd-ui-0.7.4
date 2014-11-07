@@ -285,6 +285,15 @@ menu_abort(void)
 	}
 }
 
+static gboolean rescan(gpointer data)
+{		
+	WI_SCAN *wi = (WI_SCAN *) data;
+	system ("wpa_cli scan");
+	if (gtk_widget_get_visible(wi->ifmenu))
+		return TRUE;
+	else return FALSE;
+}
+
 static void
 on_activate(GtkStatusIcon *icon)
 {
@@ -318,6 +327,8 @@ on_activate(GtkStatusIcon *icon)
 		ifmenu = false;
 		w->ifmenu = menu = add_scans(w);
 	}
+
+	g_timeout_add (5000, rescan, w);
 
 	gtk_widget_show_all(GTK_WIDGET(menu));
 	gtk_menu_popup(GTK_MENU(menu), NULL, NULL,
