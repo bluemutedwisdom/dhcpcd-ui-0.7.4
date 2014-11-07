@@ -162,15 +162,17 @@ create_menu(GtkWidget *m, WI_SCAN *wis, DHCPCD_WI_SCAN *scan)
 	double perc;
 	const char *icon;
 	char *tip;
+	GtkWidget *str, *pixbuf;
 
 	wim = g_malloc(sizeof(*wim));
 	wim->scan = scan;
 	wim->menu = gtk_check_menu_item_new();
-	gtk_check_menu_item_set_draw_as_radio(
-	    GTK_CHECK_MENU_ITEM(wim->menu), true);
+	//gtk_check_menu_item_set_draw_as_radio(
+	//    GTK_CHECK_MENU_ITEM(wim->menu), true);
 	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
 	gtk_container_add(GTK_CONTAINER(wim->menu), box);
 	wim->ssid = gtk_label_new(scan->ssid);
+	gtk_misc_set_alignment(GTK_MISC(wim->ssid),0.0,0.5);
 
 	gtk_box_pack_start(GTK_BOX(box), wim->ssid, TRUE, TRUE, 0);
 
@@ -180,27 +182,33 @@ create_menu(GtkWidget *m, WI_SCAN *wis, DHCPCD_WI_SCAN *scan)
 		    GTK_CHECK_MENU_ITEM(wim->menu), true);
 
 	if (scan->flags[0] == '\0')
-		icon = "network-wireless";
+		icon = "changes-allow";
 	else
-		icon = "network-wireless-encrypted";
+		icon = "changes-prevent";
 	wim->icon = gtk_image_new_from_icon_name(icon,
 	    GTK_ICON_SIZE_MENU);
 
 	gtk_box_pack_start(GTK_BOX(box), wim->icon, FALSE, FALSE, 0);
 
-	wim->bar = gtk_progress_bar_new();
-	gtk_widget_set_size_request(wim->bar, 100, -1);
-	gtk_box_pack_end(GTK_BOX(box), wim->bar, FALSE, TRUE, 0);
-	perc = scan->strength.value / 100.0;
-	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(wim->bar), perc);
+    if (scan->strength.value > 75)
+        pixbuf = gdk_pixbuf_new_from_file_at_size ("/usr/share/pixmaps/wifi-full.svg", 16, 16, NULL);
+    else if (scan->strength.value > 50)
+        pixbuf = gdk_pixbuf_new_from_file_at_size ("/usr/share/pixmaps/wifi-75.svg", 16, 16, NULL);
+    else if (scan->strength.value > 25)
+        pixbuf = gdk_pixbuf_new_from_file_at_size ("/usr/share/pixmaps/wifi-50.svg", 16, 16, NULL);
+    else 
+        pixbuf = gdk_pixbuf_new_from_file_at_size ("/usr/share/pixmaps/wifi-25.svg", 16, 16, NULL);
+       
+    str = gtk_image_new_from_pixbuf (pixbuf);
+    gtk_box_pack_start(GTK_BOX(box), str, FALSE, FALSE, 0);
 
-	if (scan->flags[0] == '\0')
-		gtk_widget_set_tooltip_text(wim->menu, scan->bssid);
-	else {
-		tip = g_strconcat(scan->bssid, " ", scan->flags, NULL);
-		gtk_widget_set_tooltip_text(wim->menu, tip);
-		g_free(tip);
-	}
+	//if (scan->flags[0] == '\0')
+	//	gtk_widget_set_tooltip_text(wim->menu, scan->bssid);
+	//else {
+	//	tip = g_strconcat(scan->bssid, " ", scan->flags, NULL);
+	//	gtk_widget_set_tooltip_text(wim->menu, tip);
+	//	g_free(tip);
+	//}
 
 	g_signal_connect(G_OBJECT(wim->menu), "toggled",
 	    G_CALLBACK(ssid_hook), NULL);
