@@ -224,7 +224,6 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 	WI_MENU *wim, *win;
 	DHCPCD_WI_SCAN *s;
 	bool found;
-	int adjust = 0;
 
 	if (menu == NULL) {
 		dhcpcd_wi_scans_free(wi->scans);
@@ -237,11 +236,27 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 			gtk_widget_destroy(wim->menu);
 			g_free(wim);
 	}
+	if (wi->sep) gtk_widget_destroy (wi->sep);
 
 	for (s = scans; s; s = s->next) {
-		wim = create_menu(wi->ifmenu, wi, s);
-		TAILQ_INSERT_TAIL(&wi->menus, wim, next);
-		gtk_widget_show_all(wim->menu);
+		if (wi->interface->up && g_strcmp0(s->ssid, wi->interface->ssid) == 0)
+		{
+			wim = create_menu(wi->ifmenu, wi, s);
+			TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+			gtk_widget_show_all(wim->menu);
+			wi->sep = gtk_separator_menu_item_new ();
+			gtk_widget_show(wi->sep);
+			gtk_menu_shell_append (GTK_MENU_SHELL (wi->ifmenu), wi->sep);
+		}
+	}
+
+	for (s = scans; s; s = s->next) {
+		if (!wi->interface->up || g_strcmp0(s->ssid, wi->interface->ssid))
+		{
+			wim = create_menu(wi->ifmenu, wi, s);
+			TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+			gtk_widget_show_all(wim->menu);
+		}
 	}
 
 	dhcpcd_wi_scans_free(wi->scans);
@@ -263,9 +278,24 @@ add_scans(WI_SCAN *wi)
 		return NULL;
 
 	m = gtk_menu_new();
+
+	// pass through list once to find currently connected SSID if present and put it at the top
 	for (wis = wi->scans; wis; wis = wis->next) {
-		wim = create_menu(m, wi, wis);
-		TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+		if (wi->interface->up && g_strcmp0(wis->ssid, wi->interface->ssid) == 0)
+		{
+			wim = create_menu(m, wi, wis);
+			TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+			wi->sep = gtk_separator_menu_item_new ();
+			gtk_widget_show(wi->sep);
+			gtk_menu_shell_append (GTK_MENU_SHELL (m), wi->sep);
+		}
+	}
+	for (wis = wi->scans; wis; wis = wis->next) {
+		if (!wi->interface->up || g_strcmp0(wis->ssid, wi->interface->ssid))
+		{
+			wim = create_menu(m, wi, wis);
+			TAILQ_INSERT_TAIL(&wi->menus, wim, next);
+		}
 	}
 
 	return m;
