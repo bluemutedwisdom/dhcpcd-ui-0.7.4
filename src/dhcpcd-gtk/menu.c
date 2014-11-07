@@ -162,24 +162,27 @@ create_menu(GtkWidget *m, WI_SCAN *wis, DHCPCD_WI_SCAN *scan)
 	double perc;
 	const char *icon;
 	char *tip;
-	GtkWidget *str, *pixbuf;
+	GtkWidget *str;
+	GdkPixbuf *pixbuf;
 
 	wim = g_malloc(sizeof(*wim));
 	wim->scan = scan;
-	wim->menu = gtk_check_menu_item_new();
-	//gtk_check_menu_item_set_draw_as_radio(
-	//    GTK_CHECK_MENU_ITEM(wim->menu), true);
+	wim->menu = gtk_image_menu_item_new();
 	box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
 	gtk_container_add(GTK_CONTAINER(wim->menu), box);
-	wim->ssid = gtk_label_new(scan->ssid);
-	gtk_misc_set_alignment(GTK_MISC(wim->ssid),0.0,0.5);
-
-	gtk_box_pack_start(GTK_BOX(box), wim->ssid, TRUE, TRUE, 0);
 
 	if (wis->interface->up &&
 	    g_strcmp0(scan->ssid, wis->interface->ssid) == 0)
-		gtk_check_menu_item_set_active(
-		    GTK_CHECK_MENU_ITEM(wim->menu), true);
+	{
+        pixbuf = gdk_pixbuf_new_from_file_at_size ("/usr/share/pixmaps/tick.svg", 16, 16, NULL);       
+    	str = gtk_image_new_from_pixbuf (pixbuf);
+    	//gtk_box_pack_start(GTK_BOX(box), str, FALSE, FALSE, 0);
+    	gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM(wim->menu), str);
+	}  
+	
+	wim->ssid = gtk_label_new(scan->ssid);
+	gtk_misc_set_alignment(GTK_MISC(wim->ssid),0.0,0.5);
+	gtk_box_pack_start(GTK_BOX(box), wim->ssid, TRUE, TRUE, 0);
 
 	if (scan->flags[0] == '\0')
 		icon = "changes-allow";
@@ -210,8 +213,7 @@ create_menu(GtkWidget *m, WI_SCAN *wis, DHCPCD_WI_SCAN *scan)
 	//	g_free(tip);
 	//}
 
-	g_signal_connect(G_OBJECT(wim->menu), "toggled",
-	    G_CALLBACK(ssid_hook), NULL);
+	g_signal_connect(G_OBJECT(wim->menu), "activate", G_CALLBACK(ssid_hook), NULL);
 	g_object_set_data(G_OBJECT(wim->menu), "dhcpcd_wi_scan", scan);
 	gtk_menu_shell_append(GTK_MENU_SHELL(m), wim->menu);
 
