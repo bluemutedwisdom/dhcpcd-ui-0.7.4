@@ -774,7 +774,6 @@ static gboolean rescan (gpointer data)
 		{
 			if (w->interface->wireless && w->interface->up)
 			{
-				g_message ("rescan");
 				system ("wpa_cli scan");
 				break;
 			}

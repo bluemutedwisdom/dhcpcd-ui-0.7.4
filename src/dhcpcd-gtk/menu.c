@@ -340,9 +340,9 @@ static gboolean rescan_in_menu (gpointer data)
 		{
 			if (w->interface->wireless && w->interface->up)
 			{
-				g_message ("rescan in menu");
 				system ("wpa_cli scan");
-				return TRUE;
+       			if (gtk_widget_get_visible (w->ifmenu)) return TRUE;
+       			return FALSE;
 			}
 		}
 	}
