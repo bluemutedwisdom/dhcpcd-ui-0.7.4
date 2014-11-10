@@ -240,6 +240,7 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 	}
 	if (wi->sep) gtk_widget_destroy (wi->sep);
 
+	wi->sep = NULL;
 	for (s = scans; s; s = s->next) {
 		if (wi->interface->up && g_strcmp0(s->ssid, wi->interface->ssid) == 0)
 		{
@@ -264,8 +265,11 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 	dhcpcd_wi_scans_free(wi->scans);
 	wi->scans = scans;
 
-	if (gtk_widget_get_visible(wi->ifmenu))
-		gtk_menu_reposition(GTK_MENU(wi->ifmenu));
+	if (wi->ifmenu)
+	{
+		if (gtk_widget_get_visible(wi->ifmenu))
+			gtk_menu_reposition(GTK_MENU(wi->ifmenu));
+	}
 }
 
 
@@ -282,6 +286,7 @@ add_scans(WI_SCAN *wi)
 	m = gtk_menu_new();
 
 	// pass through list once to find currently connected SSID if present and put it at the top
+	wi->sep = NULL;
 	for (wis = wi->scans; wis; wis = wis->next) {
 		if (wi->interface->up && g_strcmp0(wis->ssid, wi->interface->ssid) == 0)
 		{
@@ -325,13 +330,23 @@ menu_abort(void)
 	}
 }
 
-static gboolean rescan(gpointer data)
+static gboolean rescan_in_menu (gpointer data)
 {		
-	WI_SCAN *wi = (WI_SCAN *) data;
-	system ("wpa_cli scan");
-	if (gtk_widget_get_visible(wi->ifmenu))
-		return TRUE;
-	else return FALSE;
+	WI_SCAN *w;
+	
+	if (TAILQ_FIRST(&wi_scans))
+	{
+		TAILQ_FOREACH(w, &wi_scans, next) 
+		{
+			if (w->interface->wireless && w->interface->up)
+			{
+				g_message ("rescan in menu");
+				system ("wpa_cli scan");
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
 }
 
 static void
@@ -368,7 +383,7 @@ on_activate(GtkStatusIcon *icon)
 		w->ifmenu = menu = add_scans(w);
 	}
 
-	g_timeout_add (5000, rescan, w);
+	g_timeout_add (5000, rescan_in_menu, w);
 
 	gtk_widget_show_all(GTK_WIDGET(menu));
 	gtk_menu_popup(GTK_MENU(menu), NULL, NULL,

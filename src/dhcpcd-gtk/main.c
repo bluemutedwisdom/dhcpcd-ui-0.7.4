@@ -756,6 +756,7 @@ dhcpcd_wpa_status_cb(DHCPCD_WPA *wpa, const char *status, _unused void *data)
 	{
 		dhcpcd_unwatch(-1, wpa);
 		while ((w = TAILQ_FIRST(&wi_scans))) {
+			if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
 			TAILQ_REMOVE(&wi_scans, w, next);
 			dhcpcd_wi_scans_free(w->scans);
 			g_free(w);
@@ -763,9 +764,22 @@ dhcpcd_wpa_status_cb(DHCPCD_WPA *wpa, const char *status, _unused void *data)
 	}
 }
 
-static gboolean rescan(gpointer data)
+static gboolean rescan (gpointer data)
 {
-	system ("wpa_cli scan");
+	WI_SCAN *w;
+	
+	if (TAILQ_FIRST(&wi_scans))
+	{
+		TAILQ_FOREACH(w, &wi_scans, next) 
+		{
+			if (w->interface->wireless && w->interface->up)
+			{
+				g_message ("rescan");
+				system ("wpa_cli scan");
+				break;
+			}
+		}
+	}
 	return TRUE;
 }
 
