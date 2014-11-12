@@ -338,7 +338,7 @@ static gboolean rescan_in_menu (gpointer data)
 	{
 		TAILQ_FOREACH(w, &wi_scans, next) 
 		{
-			if (w->interface->wireless && w->interface->up)
+			if (w->interface->wireless)
 			{
 				system ("wpa_cli scan");
        			if (gtk_widget_get_visible (w->ifmenu)) return TRUE;

@@ -772,7 +772,7 @@ static gboolean rescan (gpointer data)
 	{
 		TAILQ_FOREACH(w, &wi_scans, next) 
 		{
-			if (w->interface->wireless && w->interface->up)
+			if (w->interface->wireless)
 			{
 				system ("wpa_cli scan");
 				break;
@@ -822,6 +822,8 @@ main(int argc, char *argv[])
 		g_timeout_add(DHCPCD_RETRYOPEN, dhcpcd_try_open, con);
 
 	menu_init(status_icon, con);
+	
+	system ("wpa_cli scan");
 
 	g_timeout_add (60000, rescan, NULL);
 
