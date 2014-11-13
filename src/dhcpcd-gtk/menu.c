@@ -32,7 +32,6 @@ static const char *authors[] = { "Roy Marples <roy@marples.name>", NULL };
 
 static GtkStatusIcon *sicon;
 static GtkWidget *menu;
-static bool ifmenu;
 
 static void
 on_pref(_unused GObject *o, gpointer data)
@@ -238,7 +237,7 @@ menu_update_scans(WI_SCAN *wi, DHCPCD_WI_SCAN *scans)
 			gtk_widget_destroy(wim->menu);
 			g_free(wim);
 	}
-	if (wi->sep) gtk_widget_destroy (wi->sep);
+	if (wi->sep) gtk_widget_destroy (wi->sep);   //!!!!
 
 	wi->sep = NULL;
 	for (s = scans; s; s = s->next) {
@@ -316,6 +315,7 @@ menu_abort(void)
 
 	TAILQ_FOREACH(wis, &wi_scans, next) {
 		wis->ifmenu = NULL;
+		wis->sep = NULL;
 		while ((wim = TAILQ_FIRST(&wis->menus))) {
 			TAILQ_REMOVE(&wis->menus, wim, next);
 			g_free(wim);
@@ -333,6 +333,8 @@ menu_abort(void)
 static gboolean rescan_in_menu (gpointer data)
 {		
 	WI_SCAN *w;
+	char buffer[64];
+	bool rescan = FALSE;
 	
 	if (TAILQ_FIRST(&wi_scans))
 	{
@@ -340,13 +342,13 @@ static gboolean rescan_in_menu (gpointer data)
 		{
 			if (w->interface->wireless)
 			{
-				system ("wpa_cli scan");
-       			if (gtk_widget_get_visible (w->ifmenu)) return TRUE;
-       			return FALSE;
+				sprintf (buffer, "wpa_cli scan -i %s", w->interface->ifname);
+				system (buffer);
+       			if (gtk_widget_get_visible (w->ifmenu)) rescan = TRUE;
 			}
 		}
 	}
-	return FALSE;
+	return rescan;
 }
 
 static void
@@ -365,7 +367,6 @@ on_activate(GtkStatusIcon *icon)
 
 	if ((l = TAILQ_LAST(&wi_scans, wi_scan_head)) && l != w) {
 		menu = gtk_menu_new();
-		ifmenu = true;
 		TAILQ_FOREACH(w, &wi_scans, next) {
 			item = gtk_image_menu_item_new_with_label(
 				w->interface->ifname);
@@ -379,7 +380,6 @@ on_activate(GtkStatusIcon *icon)
 			    w->ifmenu);
 		}
 	} else {
-		ifmenu = false;
 		w->ifmenu = menu = add_scans(w);
 	}
 

@@ -715,6 +715,7 @@ dhcpcd_wpa_scan_cb(DHCPCD_WPA *wpa, _unused void *data)
 		w->interface = i;
 		w->scans = scans;
 		w->ifmenu = NULL;
+		w->sep = NULL;
 		TAILQ_INIT(&w->menus);
 		TAILQ_INSERT_TAIL(&wi_scans, w, next);
 	} else {
@@ -748,34 +749,49 @@ static void
 dhcpcd_wpa_status_cb(DHCPCD_WPA *wpa, const char *status, _unused void *data)
 {
 	DHCPCD_IF *i;
-	WI_SCAN *w;
+	WI_SCAN *w, *ws;
 
 	i = dhcpcd_wpa_if(wpa);
 	g_message("%s: WPA status %s", i->ifname, status);
 	if (g_strcmp0(status, "down") == 0)
 	{
 		dhcpcd_unwatch(-1, wpa);
-		while ((w = TAILQ_FIRST(&wi_scans))) {
-			if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
-			TAILQ_REMOVE(&wi_scans, w, next);
-			dhcpcd_wi_scans_free(w->scans);
-			g_free(w);
+		
+		if (TAILQ_FIRST(&wi_scans))
+		{
+			TAILQ_FOREACH_SAFE(w, &wi_scans, next, ws) 
+			{
+				if (strcmp (w->interface->ifname, i->ifname) == 0) 
+				{
+					if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
+					TAILQ_REMOVE(&wi_scans, w, next);
+					dhcpcd_wi_scans_free(w->scans);
+					g_free(w);
+				}
+			}
 		}
+		//while ((w = TAILQ_FIRST(&wi_scans))) {
+		//	if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
+		//	TAILQ_REMOVE(&wi_scans, w, next);
+		//	dhcpcd_wi_scans_free(w->scans);
+		//	g_free(w);
+		//}
 	}
 }
 
 static gboolean rescan (gpointer data)
 {
 	WI_SCAN *w;
+	char buffer[64];
 	
 	if (TAILQ_FIRST(&wi_scans))
 	{
 		TAILQ_FOREACH(w, &wi_scans, next) 
 		{
-			if (w->interface->wireless)
+			if (w->interface->wireless) 
 			{
-				system ("wpa_cli scan");
-				break;
+				sprintf (buffer, "wpa_cli scan -i %s", w->interface->ifname);
+				system (buffer);
 			}
 		}
 	}
@@ -822,8 +838,20 @@ main(int argc, char *argv[])
 		g_timeout_add(DHCPCD_RETRYOPEN, dhcpcd_try_open, con);
 
 	menu_init(status_icon, con);
-	
-	system ("wpa_cli scan");
+
+
+	DHCPCD_IF *ifs, *i;
+	char buffer[64];
+
+	ifs = dhcpcd_interfaces (con);
+	for (i = ifs; i; i = i->next)
+	{
+		if (i->wireless)
+		{
+			sprintf (buffer, "wpa_cli scan -i %s", i->ifname);
+			system (buffer);
+		}
+	}
 
 	g_timeout_add (60000, rescan, NULL);
 
