@@ -25,10 +25,12 @@
  */
 
 #include <QDialog>
+#include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSpacerItem>
 #include <QVBoxLayout>
 
 #include "config.h"
@@ -38,16 +40,18 @@
 DhcpcdAbout::DhcpcdAbout(DhcpcdQt *parent)
     : QDialog(parent)
 {
-	QVBoxLayout *layout;
-
 	this->parent = parent;
+	QVBoxLayout *layout;
 	resize(300, 200);
 	setWindowIcon(DhcpcdQt::getIcon("status", "network-transmit-receive"));
 	setWindowTitle(tr("About Network Configurator"));
+	QPoint p = QCursor::pos();
+	move(p.x(), p.y());
+
 	layout = new QVBoxLayout(this);
 
 	QIcon icon = DhcpcdQt::getIcon("status", "network-transmit-receive");
-	QPixmap picon = icon.pixmap(48, 48);
+	QPixmap picon = icon.pixmap(32, 32);
 	iconLabel = new QLabel(this);
 	iconLabel->setAlignment(Qt::AlignCenter);
 	iconLabel->setPixmap(picon);
@@ -71,9 +75,12 @@ DhcpcdAbout::DhcpcdAbout(DhcpcdQt *parent)
 	urlLabel->setOpenExternalLinks(true);
 	layout->addWidget(urlLabel);
 
-	closeButton = new QPushButton(tr("Close"), this);
+	QHBoxLayout *hbox = new QHBoxLayout();
+	layout->addLayout(hbox);
+	hbox->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
+	closeButton = new QPushButton(tr("Close"));
 	closeButton->setIcon(QIcon::fromTheme("window-close"));
-	layout->addWidget(closeButton);
+	hbox->addWidget(closeButton);
 	connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
 }
 

@@ -37,6 +37,7 @@ static GtkWidget *autoconf, *address, *router, *dns_servers, *dns_search;
 static DHCPCD_OPTION *config;
 static char *block, *name;
 static DHCPCD_IF *iface;
+static char **ifaces;
 
 static void
 config_err_dialog(DHCPCD_CONNECTION *con, bool writing, const char *txt)
@@ -210,12 +211,13 @@ static GSList *
 list_interfaces(DHCPCD_CONNECTION *con)
 {
 	GSList *list;
-	DHCPCD_IF *i;
+	char **i;
 
 	list = NULL;
-	for (i = dhcpcd_interfaces(con); i; i = i->next)
-		if (strcmp(i->type, "ipv4") == 0)
-			list = g_slist_append(list, UNCONST(i->ifname));
+	dhcpcd_freev(ifaces);
+	ifaces = dhcpcd_interface_names_sorted(con);
+	for (i = ifaces; i && *i; i++)
+		list = g_slist_append(list, *i);
 	return list;
 }
 
@@ -306,7 +308,7 @@ blocks_on_change(GtkWidget *widget, gpointer data)
 	}
 	gtk_widget_set_sensitive(names, n);
 	g_slist_free(new_names);
-	g_strfreev(list);
+	dhcpcd_freev(list);
 }
 
 static void
@@ -331,7 +333,7 @@ names_on_change(_unused GtkWidget *widget, gpointer data)
 			}
 	}
 	gtk_widget_set_sensitive(address,
-	    iface && (iface->flags & IFF_POINTOPOINT) == 0);
+	    !iface || (iface->flags & IFF_POINTOPOINT) == 0);
 	if (block && name) {
 		errno = 0;
 		config = dhcpcd_config_read(con, block, name);
@@ -466,7 +468,10 @@ on_destroy(_unused GObject *o, gpointer data)
 	}
 	dhcpcd_config_free(config);
 	config = NULL;
+	dhcpcd_freev(ifaces);
+	ifaces = NULL;
 	dialog = NULL;
+
 }
 
 static void
@@ -523,7 +528,7 @@ prefs_show(DHCPCD_CONNECTION *con)
 	gtk_window_set_resizable(GTK_WINDOW(dialog), false);
 	gtk_window_set_icon_name(GTK_WINDOW(dialog),
 	    "preferences-system-network");
-	gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);
+	gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_MOUSE);
 	gtk_window_set_type_hint(GTK_WINDOW(dialog),
 	    GDK_WINDOW_TYPE_HINT_DIALOG);
 
@@ -542,7 +547,7 @@ prefs_show(DHCPCD_CONNECTION *con)
 	g_object_unref(pb);
 	pb = load_icon("network-wireless");
 	gtk_list_store_append(store, &iter);
-	gtk_list_store_set(store, &iter, 0, pb, 1, "ssid", -1);
+	gtk_list_store_set(store, &iter, 0, pb, 1, "SSID", -1);
 	g_object_unref(pb);
 	blocks = gtk_combo_box_new_with_model(GTK_TREE_MODEL(store));
 	rend = gtk_cell_renderer_pixbuf_new();
@@ -626,19 +631,19 @@ prefs_show(DHCPCD_CONNECTION *con)
 	gtk_box_pack_start(GTK_BOX(dialog_vbox), hbox, true, true, 3);
 	clear = gtk_button_new_from_stock(GTK_STOCK_CLEAR);
 	gtk_widget_set_sensitive(clear, false);
-	gtk_box_pack_start(GTK_BOX(hbox), clear, false, false, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), clear, true, true, 0);
 	g_signal_connect(G_OBJECT(clear), "clicked",
 	    G_CALLBACK(on_clear), con);
 	rebind = gtk_button_new_with_mnemonic(_("_Rebind"));
 	gtk_widget_set_sensitive(rebind, false);
-	w = gtk_image_new_from_stock(GTK_STOCK_EXECUTE,
+	w = gtk_image_new_from_icon_name("application-x-executable",
 	    GTK_ICON_SIZE_BUTTON);
 	gtk_button_set_image(GTK_BUTTON(rebind), w);
-	gtk_box_pack_start(GTK_BOX(hbox), rebind, false, false, 0);
+	gtk_box_pack_start(GTK_BOX(hbox), rebind, true, true, 0);
 	g_signal_connect(G_OBJECT(rebind), "clicked",
 	    G_CALLBACK(on_rebind), con);
 	w = gtk_button_new_from_stock(GTK_STOCK_CLOSE);
-	gtk_box_pack_end(GTK_BOX(hbox), w, false, false, 0);
+	gtk_box_pack_end(GTK_BOX(hbox), w, true, true, 0);
 	g_signal_connect(G_OBJECT(w), "clicked",
 	    G_CALLBACK(prefs_close), NULL);
 

@@ -27,14 +27,18 @@
 #ifndef DHCPCD_WI_H
 #define DHCPCD_WI_H
 
+#include <QAction>
 #include <QObject>
 
 #include "dhcpcd.h"
 
-class DhcpcdQt;
 class QMenu;
 class QSocketNotifier;
 class QTimer;
+class QWidgetAction;
+
+class DhcpcdQt;
+class DhcpcdSsidMenu;
 
 class DhcpcdWi : public QObject
 {
@@ -65,7 +69,8 @@ private:
 	QTimer *retryOpenTimer;
 
 	QMenu *menu;
-	void createMenuItem(QMenu *menu, DHCPCD_WI_SCAN *scan);
+	void createMenuItem(QMenu *menu, DHCPCD_WI_SCAN *scan,
+	    QAction *before = NULL);
 	void createMenu1(QMenu *parent);
 };
 

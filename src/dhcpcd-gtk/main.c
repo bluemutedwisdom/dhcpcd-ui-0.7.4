@@ -445,6 +445,20 @@ dhcpcd_if_cb(DHCPCD_IF *i, _unused void *data)
 	/* Update the tooltip with connection information */
 	con = dhcpcd_if_connection(i);
 	update_online(con, false);
+
+	if (i->wireless) {
+		DHCPCD_WI_SCAN *scans;
+		WI_SCAN *w;
+
+		TAILQ_FOREACH(w, &wi_scans, next) {
+			if (w->interface == i)
+				break;
+		}
+		if (w) {
+			scans = dhcpcd_wi_scans(i);
+			menu_update_scans(w, scans);
+		}
+	}
 }
 
 static gboolean
@@ -497,181 +511,6 @@ dhcpcd_wpa_try_open(gpointer data)
 	return FALSE;
 }
 
-/*
- * This file is copyright 2001 Simon Tatham.
- * 
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- * 
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT.  IN NO EVENT SHALL SIMON TATHAM BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
- * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
-DHCPCD_WI_SCAN *listsort(DHCPCD_WI_SCAN *list) {
-    DHCPCD_WI_SCAN *p, *q, *e, *tail;
-    int insize, nmerges, psize, qsize, i;
-
-    /*
-     * Silly special case: if `list' was passed in as NULL, return
-     * NULL immediately.
-     */
-    if (!list)
-	return NULL;
-
-    insize = 1;
-
-    while (1) {
-        p = list;
-        list = NULL;
-        tail = NULL;
-
-        nmerges = 0;  /* count number of merges we do in this pass */
-
-        while (p) {
-            nmerges++;  /* there exists a merge to be done */
-            /* step `insize' places along from p */
-            q = p;
-            psize = 0;
-            for (i = 0; i < insize; i++) {
-                psize++;
-		    q = q->next;
-                if (!q) break;
-            }
-
-            /* if q hasn't fallen off end, we have two lists to merge */
-            qsize = insize;
-
-            /* now we have two lists; merge them */
-            while (psize > 0 || (qsize > 0 && q)) {
-
-                /* decide whether next element of merge comes from p or q */
-                if (psize == 0) {
-		    /* p is empty; e must come from q. */
-		    e = q; q = q->next; qsize--;
-		} else if (qsize == 0 || !q) {
-		    /* q is empty; e must come from p. */
-		    e = p; p = p->next; psize--;
-		} else if (strcasecmp(p->ssid,q->ssid) <= 0) {
-		    /* First element of p is lower (or same);
-		     * e must come from p. */
-		    e = p; p = p->next; psize--;
-		} else {
-		    /* First element of q is lower; e must come from q. */
-		    e = q; q = q->next; qsize--;
-		}
-
-                /* add the next element to the merged list */
-		if (tail) {
-		    tail->next = e;
-		} else {
-		    list = e;
-		}
-		tail = e;
-            }
-
-            /* now p has stepped `insize' places along, and q has too */
-            p = q;
-        }
-	    tail->next = NULL;
-
-        /* If we have done only one merge, we're finished. */
-        if (nmerges <= 1)   /* allow for nmerges==0, the empty list case */
-            return list;
-
-        /* Otherwise repeat, merging lists twice the size */
-        insize *= 2;
-    }
-}
-
-DHCPCD_WI_SCAN *process_scans (DHCPCD_WI_SCAN *scans)
-{
-	DHCPCD_WI_SCAN *sc, *sc2, *scp, *scp2, *head;
-
-	head = scans;
-	sc = scans;
-	scp = scans;
-jump:
-	while (sc)
-	{
-		if (strlen (sc->ssid) == 0)
-		{
-			// get rid of anything without an SSID
-			if (sc == head)
-			{
-				head = sc->next;
-				free (sc);
-				sc = head;
-				scp = head;
-			}
-			else
-			{
-				scp->next = sc->next;
-				free (sc);
-				sc = scp->next;
-			}
-			goto jump;
-		}
-
-		sc2 = sc->next;
-		scp2 = sc;
-		while (sc2)
-		{
-			if (g_strcmp0 (sc->ssid, sc2->ssid) == 0)
-			{
-				if (sc->strength.value < sc2->strength.value)
-				{
-					// delete sc from list
-					if (sc == head)
-					{
-						head = sc->next;
-						free (sc);
-						sc = head;
-						scp = head;
-					}
-					else
-					{
-						scp->next = sc->next;
-						free (sc);
-						sc = scp->next;
-					}
-					goto jump;
-				}
-				else
-				{
-					// delete sc2 from list
-					scp2->next = sc2->next;
-					free (sc2);
-					sc2 = scp2->next;
-				}
-			}
-			else
-			{
-				scp2 = sc2;
-				sc2 = sc2->next;
-			}
-		}
-		scp = sc;
-		sc = sc->next;
-	}
-
-	return listsort (head);
-}
-
 static void
 dhcpcd_wpa_scan_cb(DHCPCD_WPA *wpa, _unused void *data)
 {
@@ -700,9 +539,6 @@ dhcpcd_wpa_scan_cb(DHCPCD_WPA *wpa, _unused void *data)
 	lerrno = errno;
 	errno = 0;
 	scans = dhcpcd_wi_scans(i);
-
-	scans = process_scans (scans);
-
 	if (scans == NULL && errno)
 		g_warning("%s: %s", i->ifname, strerror(errno));
 	errno = lerrno;
@@ -723,7 +559,7 @@ dhcpcd_wpa_scan_cb(DHCPCD_WPA *wpa, _unused void *data)
 		msg = N_("New Access Point");
 		for (s1 = scans; s1; s1 = s1->next) {
 			for (s2 = w->scans; s2; s2 = s2->next)
-				if (g_strcmp0(s1->bssid, s2->bssid) == 0)
+				if (g_strcmp0(s1->ssid, s2->ssid) == 0)
 					break;
 			if (s2 == NULL) {
 				if (txt == NULL)
@@ -749,33 +585,20 @@ static void
 dhcpcd_wpa_status_cb(DHCPCD_WPA *wpa, const char *status, _unused void *data)
 {
 	DHCPCD_IF *i;
-	WI_SCAN *w, *ws;
+	WI_SCAN *w, *wn;
 
 	i = dhcpcd_wpa_if(wpa);
 	g_message("%s: WPA status %s", i->ifname, status);
-	if (g_strcmp0(status, "down") == 0)
-	{
+	if (g_strcmp0(status, "down") == 0) {
 		dhcpcd_unwatch(-1, wpa);
-		
-		if (TAILQ_FIRST(&wi_scans))
-		{
-			TAILQ_FOREACH_SAFE(w, &wi_scans, next, ws) 
-			{
-				if (strcmp (w->interface->ifname, i->ifname) == 0) 
-				{
-					if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
-					TAILQ_REMOVE(&wi_scans, w, next);
-					dhcpcd_wi_scans_free(w->scans);
-					g_free(w);
-				}
+		TAILQ_FOREACH_SAFE(w, &wi_scans, next, wn) {
+			if (w->interface == i) {
+				TAILQ_REMOVE(&wi_scans, w, next);
+				menu_remove_if(w);
+				dhcpcd_wi_scans_free(w->scans);
+				g_free(w);
 			}
 		}
-		//while ((w = TAILQ_FIRST(&wi_scans))) {
-		//	if (gtk_widget_get_visible(w->ifmenu))	gtk_menu_popdown (w->ifmenu);
-		//	TAILQ_REMOVE(&wi_scans, w, next);
-		//	dhcpcd_wi_scans_free(w->scans);
-		//	g_free(w);
-		//}
 	}
 }
 

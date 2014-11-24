@@ -195,6 +195,9 @@ int dhcpcd_get_fd(DHCPCD_CONNECTION *);
 bool dhcpcd_privileged(DHCPCD_CONNECTION *);
 void dhcpcd_dispatch(DHCPCD_CONNECTION *);
 DHCPCD_IF * dhcpcd_interfaces(DHCPCD_CONNECTION *);
+char **dhcpcd_interface_names(DHCPCD_CONNECTION *, size_t *);
+void dhcpcd_freev(char **);
+char **dhcpcd_interface_names_sorted(DHCPCD_CONNECTION *);
 DHCPCD_IF * dhcpcd_get_if(DHCPCD_CONNECTION *, const char *, const char *);
 DHCPCD_CONNECTION * dhcpcd_if_connection(DHCPCD_IF *);
 const char *dhcpcd_get_value(const DHCPCD_IF *, const char *);
@@ -225,6 +228,7 @@ void dhcpcd_wpa_set_scan_callback(DHCPCD_CONNECTION *,
     void (*)(DHCPCD_WPA *, void *), void *);
 void dhcpcd_wpa_set_status_callback(DHCPCD_CONNECTION *,
     void (*)(DHCPCD_WPA *, const char *, void *), void *);
+int dhcpcd_wi_scan_compare(DHCPCD_WI_SCAN *a, DHCPCD_WI_SCAN *b);
 DHCPCD_WI_SCAN * dhcpcd_wi_scans(DHCPCD_IF *);
 void dhcpcd_wi_scans_free(DHCPCD_WI_SCAN *);
 void dhcpcd_wi_history_clear(DHCPCD_CONNECTION *);

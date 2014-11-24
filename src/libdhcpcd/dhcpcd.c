@@ -374,11 +374,14 @@ dhcpcd_decode_string_escape(char *dst, size_t dlen, const char *src)
 		}
 		bytes++;
 	}
-	if (dst && --dlen == 0) {
-		errno = ENOSPC;
-		return -1;
+
+	if (dst) {
+		if (--dlen == 0) {
+			errno = ENOSPC;
+			return -1;
+		}
+		*dst = '\0';
 	}
-	*dst = '\0';
 	return bytes;
 }
 
@@ -506,6 +509,80 @@ dhcpcd_interfaces(DHCPCD_CONNECTION *con)
 
 	assert(con);
 	return con->interfaces;
+}
+
+char **
+dhcpcd_interface_names(DHCPCD_CONNECTION *con, size_t *nnames)
+{
+	char **names;
+	size_t n;
+	DHCPCD_IF *i;
+
+	assert(con);
+	if (con->interfaces == NULL)
+		return NULL;
+
+	n = 0;
+	for (i = con->interfaces; i; i = i->next) {
+		if (strcmp(i->type, "link") == 0)
+			n++;
+	}
+	names = malloc(sizeof(char *) * (n + 1));
+	if (names == NULL)
+		return NULL;
+	n = 0;
+	for (i = con->interfaces; i; i = i->next) {
+		if (strcmp(i->type, "link") == 0) {
+			names[n] = strdup(i->ifname);
+			if (names[n] == NULL) {
+				dhcpcd_freev(names);
+				return NULL;
+			}
+			n++;
+		}
+	}
+	names[n] = NULL;
+	if (nnames)
+		*nnames = n;
+
+	return names;
+}
+
+void
+dhcpcd_freev(char **argv)
+{
+	char **v;
+
+	if (argv) {
+		for (v = argv; *v; v++)
+			free(*v);
+		free(argv);
+	}
+}
+
+static int
+dhcpcd_cmpstring(const void *p1, const void *p2)
+{
+	const char *s1, *s2;
+	int cmp;
+
+	s1 = *(char * const *)p1;
+	s2 = *(char * const *)p2;
+	if ((cmp = strcasecmp(s1, s2)) == 0)
+		cmp = strcmp(s1, s2);
+	return cmp;
+}
+
+char **
+dhcpcd_interface_names_sorted(DHCPCD_CONNECTION *con)
+{
+	char **names;
+	size_t nnames;
+
+	names = dhcpcd_interface_names(con, &nnames);
+	if (names)
+		qsort(names, nnames, sizeof(char *), dhcpcd_cmpstring);
+	return names;
 }
 
 DHCPCD_IF *

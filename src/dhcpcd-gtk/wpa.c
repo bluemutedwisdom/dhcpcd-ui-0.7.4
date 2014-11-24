@@ -83,8 +83,8 @@ wpa_configure(DHCPCD_WPA *wpa, DHCPCD_WI_SCAN *scan)
 	wpa_dialog = gtk_dialog_new_with_buttons(s.ssid,
 	    NULL,
 	    GTK_DIALOG_MODAL,
-	    GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
 	    GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+	    GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
 	    NULL);
 	gtk_window_set_resizable(GTK_WINDOW(wpa_dialog), false);
 	gtk_window_set_icon_name(GTK_WINDOW(wpa_dialog),

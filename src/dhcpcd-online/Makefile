@@ -10,7 +10,7 @@ MAN8=		dhcpcd-online.8
 
 CPPFLAGS+=	-I${TOPDIR}
 
-LDADD+=		${LIB_DHCPCD} ${LIB_INTL}
+LDADD+=		-lrt ${LIB_DHCPCD} ${LIB_INTL}
 
 FILES=		dhcpcd-wait-online.service
 CLEANFILES+=	${FILES}
