@@ -70,7 +70,7 @@ wpa_configure(DHCPCD_WPA *wpa, DHCPCD_WI_SCAN *scan)
 	DHCPCD_WI_SCAN s;
 	GtkWidget *label, *psk, *vbox, *hbox;
 	const char *var, *errt;
-	int result;
+	int result = GTK_RESPONSE_REJECT;
 	bool retval;
 
 	/* Take a copy of scan incase it's destroyed by a scan update */
@@ -78,37 +78,45 @@ wpa_configure(DHCPCD_WPA *wpa, DHCPCD_WI_SCAN *scan)
 	s.next = NULL;
 
 	if (wpa_dialog)
+	{
 		gtk_widget_destroy(wpa_dialog);
+		wpa_dialog = NULL;
+	}
+	
+	if (s.flags[0] == '\0' || !strcmp (s.flags, "[ESS]")) result = GTK_RESPONSE_ACCEPT;
+	else
+	{	
+		wpa_dialog = gtk_dialog_new_with_buttons(s.ssid,
+			NULL,
+			GTK_DIALOG_MODAL,
+			GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+			GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
+			NULL);
+		gtk_window_set_resizable(GTK_WINDOW(wpa_dialog), false);
+		gtk_window_set_icon_name(GTK_WINDOW(wpa_dialog),
+			"network-wireless-encrypted");
+		gtk_dialog_set_default_response(GTK_DIALOG(wpa_dialog),
+			GTK_RESPONSE_ACCEPT);
+		vbox = gtk_dialog_get_content_area(GTK_DIALOG(wpa_dialog));
 
-	wpa_dialog = gtk_dialog_new_with_buttons(s.ssid,
-	    NULL,
-	    GTK_DIALOG_MODAL,
-	    GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
-	    GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
-	    NULL);
-	gtk_window_set_resizable(GTK_WINDOW(wpa_dialog), false);
-	gtk_window_set_icon_name(GTK_WINDOW(wpa_dialog),
-	    "network-wireless-encrypted");
-	gtk_dialog_set_default_response(GTK_DIALOG(wpa_dialog),
-	    GTK_RESPONSE_ACCEPT);
-	vbox = gtk_dialog_get_content_area(GTK_DIALOG(wpa_dialog));
+		hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+		label = gtk_label_new(_("Pre Shared Key:"));
+		gtk_box_pack_start(GTK_BOX(hbox), label, false, false, 5);
+		psk = gtk_entry_new();
+		gtk_entry_set_max_length(GTK_ENTRY(psk), 130);
+		g_signal_connect(G_OBJECT(psk), "activate",
+			G_CALLBACK(onEnter), wpa_dialog);
+		gtk_box_pack_start(GTK_BOX(hbox), psk, true, true, 5);
+		gtk_container_add(GTK_CONTAINER(vbox), hbox);
 
-	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	label = gtk_label_new(_("Pre Shared Key:"));
-	gtk_box_pack_start(GTK_BOX(hbox), label, false, false, 5);
-	psk = gtk_entry_new();
-	gtk_entry_set_max_length(GTK_ENTRY(psk), 130);
-	g_signal_connect(G_OBJECT(psk), "activate",
-	    G_CALLBACK(onEnter), wpa_dialog);
-	gtk_box_pack_start(GTK_BOX(hbox), psk, true, true, 5);
-	gtk_container_add(GTK_CONTAINER(vbox), hbox);
-
-	gtk_widget_show_all(wpa_dialog);
-	result = gtk_dialog_run(GTK_DIALOG(wpa_dialog));
-
+		gtk_widget_show_all(wpa_dialog);
+		result = gtk_dialog_run(GTK_DIALOG(wpa_dialog));
+		if (result == GTK_RESPONSE_ACCEPT)
+			var = gtk_entry_get_text(GTK_ENTRY(psk));
+	} 
+	
 	retval = false;
 	if (result == GTK_RESPONSE_ACCEPT) {
-		var = gtk_entry_get_text(GTK_ENTRY(psk));
 		switch (dhcpcd_wpa_configure_psk(wpa, &s, var)) {
 		case DHCPCD_WPA_SUCCESS:
 			retval = true;
